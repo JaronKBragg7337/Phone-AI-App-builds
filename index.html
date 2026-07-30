@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0c1622" />
+  <title>Phone AI 3D Environment</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #07111b; }
+    canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+    .hud {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+      z-index: 10;
+    }
+    .panel {
+      width: min(420px, calc(100vw - 32px));
+      padding: 14px 16px;
+      border: 1px solid rgba(255,255,255,.15);
+      border-radius: 18px;
+      background: rgba(4, 12, 20, .66);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 18px 50px rgba(0,0,0,.28);
+    }
+    h1 { margin: 0 0 5px; font-size: clamp(20px, 4.5vw, 30px); letter-spacing: -.03em; }
+    p { margin: 0; color: rgba(235,245,255,.78); font-size: 13px; line-height: 1.45; }
+    .status {
+      align-self: flex-end;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 9px 12px;
+      border-radius: 999px;
+      background: rgba(4, 12, 20, .62);
+      border: 1px solid rgba(255,255,255,.12);
+      color: rgba(235,245,255,.82);
+      font-size: 12px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #66f0b5; box-shadow: 0 0 14px #66f0b5; }
+    .loading {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      z-index: 20;
+      background: radial-gradient(circle at 50% 35%, #19354d, #07111b 62%);
+      transition: opacity .5s ease;
+    }
+    .loading.hidden { opacity: 0; pointer-events: none; }
+    .loader-card { text-align: center; color: white; }
+    .spinner {
+      width: 44px; height: 44px; margin: 0 auto 14px;
+      border: 3px solid rgba(255,255,255,.16);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="loading" id="loading">
+    <div class="loader-card">
+      <div class="spinner"></div>
+      <strong>Building the environment…</strong>
+    </div>
+  </div>
+
+  <div class="hud">
+    <div class="panel">
+      <h1>Riverside Glass House</h1>
+      <p>Drag to orbit. Pinch or scroll to zoom. A mobile-first Three.js scene with a road, sidewalk, water, trees, lighting, reflections, and a furnished modern building.</p>
+    </div>
+    <div class="status"><span class="dot"></span><span>Interactive 3D scene</span></div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x9bc9df);
+    scene.fog = new THREE.FogExp2(0x9bc9df, 0.0125);
+
+    const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 300);
+    camera.position.set(26, 18, 30);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.8));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 3, 0);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 10;
+    controls.maxDistance = 62;
+    controls.maxPolarAngle = Math.PI * 0.48;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.35;
+
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+    const hemi = new THREE.HemisphereLight(0xd9f3ff, 0x35502f, 2.15);
+    scene.add(hemi);
+
+    const sun = new THREE.DirectionalLight(0xfff4d6, 4.2);
+    sun.position.set(-18, 28, 14);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -45;
+    sun.shadow.camera.right = 45;
+    sun.shadow.camera.top = 45;
+    sun.shadow.camera.bottom = -45;
+    sun.shadow.bias = -0.0008;
+    scene.add(sun);
+
+    const mat = (color, roughness = .75, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
+    const grassMat = mat(0x5d8e4a, .95);
+    const earthMat = mat(0x8a7154, 1);
+    const roadMat = mat(0x252c32, .95);
+    const sidewalkMat = mat(0xbec3c0, .95);
+    const concreteMat = mat(0x9fa5a2, .88);
+    const whiteMat = mat(0xe6e2d9, .72);
+    const charcoalMat = mat(0x252a2e, .56, .08);
+    const woodMat = mat(0x9c5d32, .72);
+    const leafMat = mat(0x2f6d3d, .94);
+    const leafMat2 = mat(0x497f43, .94);
+    const trunkMat = mat(0x6f4c31, 1);
+
+    function mesh(geometry, material, position = [0,0,0], rotation = [0,0,0], cast = true, receive = true) {
+      const m = new THREE.Mesh(geometry, material);
+      m.position.set(...position);
+      m.rotation.set(...rotation);
+      m.castShadow = cast;
+      m.receiveShadow = receive;
+      scene.add(m);
+      return m;
+    }
+
+    // Terrain platform
+    mesh(new THREE.BoxGeometry(86, 1.6, 62), earthMat, [0, -1.25, 0], [0,0,0], false, true);
+    mesh(new THREE.BoxGeometry(86, .35, 40), grassMat, [0, -.28, 2.5], [0,0,0], false, true);
+
+    // River channel and banks
+    mesh(new THREE.BoxGeometry(86, .25, 18), mat(0x315f70, .18, .05), [0, -.32, -23.2], [0,0,0], false, true);
+    const water = mesh(new THREE.PlaneGeometry(86, 18, 40, 10), new THREE.MeshPhysicalMaterial({
+      color: 0x3f9db3,
+      roughness: .14,
+      metalness: .03,
+      transmission: .08,
+      transparent: true,
+      opacity: .9,
+      clearcoat: 1,
+      clearcoatRoughness: .1
+    }), [0, -.15, -23.2], [-Math.PI/2,0,0], false, true);
+
+    // Road and sidewalk
+    mesh(new THREE.BoxGeometry(86, .38, 9.5), roadMat, [0, .02, 15.5], [0,0,0], false, true);
+    mesh(new THREE.BoxGeometry(86, .28, 2.4), sidewalkMat, [0, .22, 9.45], [0,0,0], false, true);
+    mesh(new THREE.BoxGeometry(86, .22, .5), concreteMat, [0, .18, 10.9], [0,0,0], false, true);
+
+    for (let x = -39; x <= 39; x += 8) {
+      mesh(new THREE.BoxGeometry(4.2, .03, .16), mat(0xe9d58f, .82), [x, .225, 15.5], [0,0,0], false, false);
+    }
+
+    // Building podium
+    mesh(new THREE.BoxGeometry(22, .7, 15), concreteMat, [1.5, .35, 0.8]);
+    mesh(new THREE.BoxGeometry(18.5, .35, 4), woodMat, [1.5, .8, 7.9]);
+
+    // Main architectural volumes
+    mesh(new THREE.BoxGeometry(13.2, 7, 11), whiteMat, [-2.6, 4.15, .4]);
+    mesh(new THREE.BoxGeometry(7.4, 5.3, 9.7), charcoalMat, [7.4, 3.3, .2]);
+    mesh(new THREE.BoxGeometry(17, .52, 12.6), charcoalMat, [0.2, 7.8, .2]);
+    mesh(new THREE.BoxGeometry(7.4, .45, 10.4), charcoalMat, [7.4, 6.25, .2]);
+
+    // Glass facade and windows
+    const glassMat = new THREE.MeshPhysicalMaterial({
+      color: 0x9ed4e3,
+      metalness: .08,
+      roughness: .12,
+      transmission: .4,
+      transparent: true,
+      opacity: .68,
+      clearcoat: 1,
+      clearcoatRoughness: .08
+    });
+
+    const glassGroup = new THREE.Group();
+    scene.add(glassGroup);
+    function windowPanel(w, h, x, y, z, ry = 0) {
+      const g = new THREE.Mesh(new THREE.BoxGeometry(w, h, .12), glassMat);
+      g.position.set(x, y, z);
+      g.rotation.y = ry;
+      g.castShadow = true;
+      glassGroup.add(g);
+      return g;
+    }
+
+    windowPanel(10.8, 4.9, -2.6, 4.3, 6.0);
+    windowPanel(5.4, 3.7, 7.4, 3.55, 5.12);
+    windowPanel(7.7, 3.9, -9.25, 4.25, .4, Math.PI/2);
+
+    // Window framing
+    for (const x of [-7.1, -2.6, 1.9]) mesh(new THREE.BoxGeometry(.18, 5.1, .28), charcoalMat, [x, 4.3, 6.08]);
+    mesh(new THREE.BoxGeometry(11, .18, .28), charcoalMat, [-2.6, 4.3, 6.08]);
+    for (const x of [5.5, 7.4, 9.3]) mesh(new THREE.BoxGeometry(.14, 3.9, .24), charcoalMat, [x, 3.55, 5.19]);
+
+    // Entry and steps
+    mesh(new THREE.BoxGeometry(4.2, .22, 1.45), concreteMat, [5.6, .92, 7.55]);
+    mesh(new THREE.BoxGeometry(3.5, .22, 1.2), concreteMat, [5.6, .68, 8.75]);
+    mesh(new THREE.BoxGeometry(2.8, .22, .95), concreteMat, [5.6, .44, 9.75]);
+    windowPanel(2.2, 3.8, 5.6, 3.05, 5.2);
+
+    // Interior furniture visible through glass
+    mesh(new THREE.BoxGeometry(5.2, .36, 2.1), woodMat, [-3.3, 1.9, 3.65]);
+    mesh(new THREE.BoxGeometry(4.5, .7, 1.6), mat(0x3a4c4b, .8), [-3.3, 1.18, 3.4]);
+    mesh(new THREE.BoxGeometry(2.6, .32, 1.5), mat(0xbaa982, .82), [2.6, 1.4, 3.4]);
+    mesh(new THREE.CylinderGeometry(.08, .08, 1.15, 10), charcoalMat, [2.6, .78, 3.4]);
+
+    // Warm interior lights
+    for (const p of [[-5,6.4,3.8],[-1.5,6.4,3.8],[2,6.4,3.8],[7.5,5.1,3.3]]) {
+      const l = new THREE.PointLight(0xffbd72, 5.5, 11, 2);
+      l.position.set(...p);
+      scene.add(l);
+      mesh(new THREE.SphereGeometry(.12, 12, 8), new THREE.MeshBasicMaterial({color:0xffd6a1}), p, [0,0,0], false, false);
+    }
+
+    // Trees
+    function addTree(x, z, scale = 1, variant = 0) {
+      const group = new THREE.Group();
+      group.position.set(x, 0, z);
+      group.scale.setScalar(scale);
+      scene.add(group);
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(.35, .48, 4.5, 10), trunkMat);
+      trunk.position.y = 2.25;
+      trunk.castShadow = trunk.receiveShadow = true;
+      group.add(trunk);
+      const foliageMat = variant ? leafMat2 : leafMat;
+      const crowns = [
+        [0, 5.2, 0, 2.25],
+        [-1.25, 4.65, .2, 1.65],
+        [1.2, 4.75, -.15, 1.75],
+        [.2, 6.35, .15, 1.65]
+      ];
+      for (const [cx,cy,cz,r] of crowns) {
+        const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 2), foliageMat);
+        crown.position.set(cx,cy,cz);
+        crown.scale.y = .82;
+        crown.castShadow = crown.receiveShadow = true;
+        group.add(crown);
+      }
+    }
+
+    [
+      [-30,5,1.4,0],[-23,2,1.15,1],[-17,-10,1.3,0],[-27,-13,1.0,1],
+      [23,4,1.3,1],[30,1,1.55,0],[18,-11,1.15,0],[27,-12,1.2,1],
+      [-35,-12,1.05,0],[36,-8,1.35,1],[13,8,0.85,0],[-13,8,0.9,1]
+    ].forEach(t => addTree(...t));
+
+    // Shrubs and landscaping
+    for (let i = 0; i < 38; i++) {
+      const side = i % 2 ? 1 : -1;
+      const x = -18 + (i * 3.1) % 36;
+      const z = side > 0 ? 8.2 + Math.sin(i) * .55 : -7.7 + Math.cos(i) * .8;
+      const shrub = mesh(new THREE.DodecahedronGeometry(.55 + (i % 3) * .1, 1), i % 2 ? leafMat : leafMat2, [x, .62, z]);
+      shrub.scale.y = .75;
+    }
+
+    // Street lights
+    function addLamp(x, z) {
+      mesh(new THREE.CylinderGeometry(.09, .12, 4.5, 10), charcoalMat, [x, 2.25, z]);
+      mesh(new THREE.BoxGeometry(.85, .12, .12), charcoalMat, [x + .35, 4.42, z]);
+      mesh(new THREE.SphereGeometry(.18, 12, 8), new THREE.MeshBasicMaterial({color:0xffe1a6}), [x + .72, 4.3, z], [0,0,0], false, false);
+      const light = new THREE.PointLight(0xffc874, 3.6, 10, 2);
+      light.position.set(x + .72, 4.15, z);
+      scene.add(light);
+    }
+    [-32,-20,-8,8,20,32].forEach(x => addLamp(x, 9.1));
+
+    // Small bridge/deck toward water
+    mesh(new THREE.BoxGeometry(5.8, .25, 8), woodMat, [-12, .12, -12.2]);
+    for (let z = -9; z >= -15.5; z -= 1) mesh(new THREE.BoxGeometry(5.4, .04, .06), mat(0x6e3e24,.8), [-12,.27,z], [0,0,0], false, false);
+
+    // Rocks by river
+    for (let i = 0; i < 22; i++) {
+      const x = -39 + i * 3.8;
+      const z = -14.7 + Math.sin(i * 1.6) * 1.2;
+      const rock = mesh(new THREE.DodecahedronGeometry(.55 + (i % 4) * .13, 1), mat(0x7f8583, .98), [x, .15, z]);
+      rock.scale.set(1.2, .65, .9);
+      rock.rotation.set(Math.random(), Math.random(), Math.random());
+    }
+
+    // Background hills
+    for (let i = 0; i < 14; i++) {
+      const hill = mesh(new THREE.SphereGeometry(10 + (i % 4) * 2, 28, 16), mat(i % 2 ? 0x517f51 : 0x466e49, 1), [-48 + i * 8, 2.5 + (i % 3), -43 - (i % 2) * 6], [0,0,0], false, true);
+      hill.scale.y = .38;
+    }
+
+    // Moving cloud forms
+    const cloudGroup = new THREE.Group();
+    scene.add(cloudGroup);
+    for (let i = 0; i < 8; i++) {
+      const cloud = new THREE.Group();
+      cloud.position.set(-45 + i * 14, 22 + (i % 3) * 2, -24 - (i % 2) * 9);
+      cloud.userData.speed = .7 + (i % 3) * .12;
+      cloudGroup.add(cloud);
+      for (let j = 0; j < 5; j++) {
+        const puff = new THREE.Mesh(new THREE.SphereGeometry(1.3 + (j % 2) * .65, 18, 12), new THREE.MeshStandardMaterial({color:0xffffff, roughness:1, transparent:true, opacity:.72}));
+        puff.position.set(j * 1.45, Math.sin(j) * .45, Math.cos(j) * .4);
+        puff.scale.y = .65;
+        cloud.add(puff);
+      }
+    }
+
+    const clock = new THREE.Clock();
+    const waterPositions = water.geometry.attributes.position;
+    const baseWater = Float32Array.from(waterPositions.array);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+      for (let i = 0; i < waterPositions.count; i++) {
+        const ix = i * 3;
+        const x = baseWater[ix];
+        const y = baseWater[ix + 1];
+        waterPositions.array[ix + 2] = baseWater[ix + 2] + Math.sin(x * .24 + t * 1.4) * .08 + Math.cos(y * .35 + t) * .045;
+      }
+      waterPositions.needsUpdate = true;
+      cloudGroup.children.forEach(c => {
+        c.position.x += c.userData.speed * .0035;
+        if (c.position.x > 55) c.position.x = -55;
+      });
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 1.8));
+    });
+
+    setTimeout(() => document.getElementById('loading').classList.add('hidden'), 450);
+    animate();
+  </script>
+</body>
+</html>
