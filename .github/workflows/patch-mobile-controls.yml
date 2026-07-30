@@ -1,0 +1,52 @@
+name: Patch mobile controls
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-mobile-controls.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply targeted control fixes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('index.html')
+          text = path.read_text()
+
+          replacements = {
+            "let orbit=false,yaw=Math.PI,move={x:0,y:0},nearby=null;":
+            "let orbit=false,yaw=Math.PI,pitch=0,move={x:0,y:0},nearby=null;",
+
+            "let dragging=false,lastX=0;renderer.domElement.addEventListener('pointerdown',e=>{if(!orbit){dragging=true;lastX=e.clientX}});renderer.domElement.addEventListener('pointermove',e=>{if(dragging&&!orbit){yaw-=(e.clientX-lastX)*.008;lastX=e.clientX}});renderer.domElement.addEventListener('pointerup',()=>dragging=false);renderer.domElement.addEventListener('pointercancel',()=>dragging=false);":
+            "let dragging=false,lastX=0,lastY=0;renderer.domElement.addEventListener('pointerdown',e=>{if(!orbit){dragging=true;lastX=e.clientX;lastY=e.clientY;renderer.domElement.setPointerCapture?.(e.pointerId)}});renderer.domElement.addEventListener('pointermove',e=>{if(dragging&&!orbit){const dx=e.clientX-lastX,dy=e.clientY-lastY;yaw-=dx*.008;pitch=THREE.MathUtils.clamp(pitch-dy*.006,-.62,.72);lastX=e.clientX;lastY=e.clientY}});renderer.domElement.addEventListener('pointerup',()=>dragging=false);renderer.domElement.addEventListener('pointercancel',()=>dragging=false);",
+
+            "right=new THREE.Vector3(forward.z,0,-forward.x),v=forward.multiplyScalar(-move.y).add(right.multiplyScalar(move.x));":
+            "right=new THREE.Vector3(forward.z,0,-forward.x),v=forward.multiplyScalar(-move.y).add(right.multiplyScalar(-move.x));",
+
+            "const desired=new THREE.Vector3(player.position.x-Math.sin(yaw)*6,player.position.y+3.5,player.position.z-Math.cos(yaw)*6);camera.position.lerp(desired,1-Math.pow(.001,dt));camera.lookAt(player.position.x,player.position.y+1.2,player.position.z)":
+            "const horizontal=Math.cos(pitch)*6;const desired=new THREE.Vector3(player.position.x-Math.sin(yaw)*horizontal,player.position.y+3.5+Math.sin(pitch)*4.2,player.position.z-Math.cos(yaw)*horizontal);camera.position.lerp(desired,1-Math.pow(.001,dt));camera.lookAt(player.position.x,player.position.y+1.2+Math.sin(pitch)*5.2,player.position.z)"
+          }
+
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'Expected control code not found: {old[:90]}')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+      - name: Commit control patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "Fix mobile look pitch and reverse strafe mapping" || exit 0
+          git push
